@@ -1,0 +1,28 @@
+# /etc/systemd/system/truck-routing.service
+# Django API behind nginx. Resource caps keep it from affecting other apps on the host.
+[Unit]
+Description=Weather-aware truck routing API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=truckrouting
+Group=truckrouting
+WorkingDirectory=/home/truckrouting/app/backend
+EnvironmentFile=/home/truckrouting/app/backend/.env
+ExecStart=/home/truckrouting/app/backend/.venv/bin/gunicorn config.wsgi:application \
+    --bind 127.0.0.1:8100 --workers 2 --threads 4 --worker-class gthread \
+    --timeout 60 --access-logfile - --error-logfile - --no-control-socket
+Restart=always
+RestartSec=3
+
+MemoryMax=512M
+CPUQuota=50%
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/truckrouting/app/backend/.cache
+
+[Install]
+WantedBy=multi-user.target
