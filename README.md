@@ -1,145 +1,113 @@
 # Weather-Aware Truck Routing
 
-**Live app:** https://weather-aware-truck-routing-henna.vercel.app · **API:** https://truck-routing.31-97-230-124.sslip.io/api/health
+Pick the safest truck route using the forecast **at the time the truck reaches each checkpoint**, the load weight and
+the travel time.
 
-A React + Django app that compares three truck routes between two places and recommends the safest one, using the
-weather forecast for the time the truck actually reaches each checkpoint, the load weight and the travel time.
+**Live app:** https://weather-aware-truck-routing-henna.vercel.app ·
+**Demo with a storm:** [`?demo=storm`](https://weather-aware-truck-routing-henna.vercel.app/?demo=storm) ·
+**API health:** https://truck-routing.31-97-230-124.sslip.io/api/health
 
-- **Frontend:** React 19, TypeScript, Vite, MapLibre GL (OpenFreeMap tiles) and deck.gl
-- **Backend:** Django 5.2 + Django REST Framework, pure-Python domain logic, pytest
-- **Data:** TomTom truck routing (optional, with a key) or OSRM, Open-Meteo forecasts, Photon geocoding. No paid services are needed.
+## Try it in a minute
 
-## What it does
+1. Open the app. Chicago → Denver (42,000 lb) is planned automatically.
+2. Tick **Demo storm**. The fastest route now crosses No Travel weather, and the recommendation switches to a safer route
+   and says why.
+3. Press **▶ Play** to watch the trucks and the weather move. Click a route card or checkpoint row to zoom in.
 
-1. You enter an origin, a destination, a departure time, the load weight, and a checkpoint spacing of 10, 25 or 50 miles.
-2. The backend gets **3 route options**. When the routing API returns fewer than three distinct routes, it forces extra
-   routes through interstate towns off the routes found so far. It rejects candidates that overlap an existing route
-   by more than 80%, are more than 1.5× longer or slower, or contain loops and out-and-back spurs.
-3. Checkpoints are placed every N miles plus the destination. Each checkpoint's **ETA** is the departure time plus the
-   drive time to that point along the route. Weather is the **hourly forecast for that ETA**: wind is the nearest
-   hourly sample, and rain and snow are the totals for the hour that contains the ETA.
-4. Each checkpoint is classified with the assessment's risk table and load rules (`backend/trips/domain/risk.py`).
-5. Routes are ranked, and the winner comes with a one-line reason (for example "Fewest Severe miles: 0 vs 37 mi").
-6. The map shows all routes, the selected route coloured by risk, its checkpoints (hover for ETA and conditions), and
-   a **corridor heatmap** with a **forecast timeline slider** that runs from departure until the last truck arrives
-   (the brief's 0–48 h window, fitted to the trip; trips longer than 48 h extend it, up to 96 h). You can play it
-   forward, switch between risk, wind, rain and snow, and watch each route's truck move along at that hour.
+## Architecture
 
-## Demo storm mode
+```mermaid
+flowchart LR
+  U([Browser]) --> FE["React + MapLibre + deck.gl<br/>(Vercel)"]
+  FE -- "/api/* (Vercel rewrite)" --> NG["nginx + HTTPS<br/>(VPS)"]
+  NG --> API["Django REST API<br/>gunicorn, systemd"]
+  API --> R["Routing<br/>TomTom truck · OSRM fallback"]
+  API --> W["Weather<br/>Open-Meteo hourly"]
+  API --> G["Geocoding<br/>Photon"]
+  API <--> C[("File cache<br/>weather cells 1 h · routes 6 h")]
+```
 
-When the real weather is calm, everything is Low and the risk logic has nothing to show. Tick **Demo storm** in
-the form (or open the app with `?demo=storm`) to add a simulated storm to the real forecast. It is centred on the
-fastest route where the alternatives are farthest away, and it peaks when that route's truck arrives there. The core
-has about 60 mph wind (No Travel) and 0.8 in/hr rain, fading with distance (an e-folding radius of about 70 mi) and
-with time (±12 h), and it drifts east at 20 mph.
+One request, `POST /api/trips/plan`, does the whole plan:
 
-The storm only ever makes conditions worse: the stronger wind wins and the rain adds up. The risk rules, load rules,
-ranking and heatmap all run unchanged on the combined weather, and the UI labels the result as simulated.
-(`backend/trips/domain/demo_storm.py`)
+```mermaid
+flowchart LR
+  A[3 distinct routes] --> B["Checkpoints every 10/25/50 mi<br/>+ ETA at each"]
+  B --> C[Forecast at each ETA]
+  C --> D["Risk level<br/>(table + load rules)"]
+  D --> E["Rank routes<br/>+ reason"]
+  C --> F["Corridor heatmap<br/>hourly frames until arrival"]
+  E --> O[(JSON response)]
+  F --> O
+```
 
-## Risk and recommendation rules, and the choices the brief left open
+The heatmap's hourly frames all arrive in that one response, so the timeline slider never makes another request.
 
-| | Low | Moderate | High | Severe | No Travel |
-|---|---|---|---|---|---|
-| Wind (mph) | <25 | 25–34 | 35–44 | 45–54 | ≥55 |
-| Rain (in/hr) | <0.10 | 0.10–0.25 | 0.25–0.50 | 0.50–1.00 | >1.00 |
-| Snow (in/hr) | <0.5 | 0.5–1.0 | 1.0–2.0 | 2.0–3.0 | >3.0 |
+## How each requirement is met
 
-Load rules: 45–54 mph with more than 30,000 lb is No Travel; 35–44 mph with more than 40,000 lb is Severe.
+| Brief | Implementation |
+|---|---|
+| Origin, destination, departure, load | Form with place autocomplete; departure up to 3 days ahead; 0–80,000 lb |
+| 3 route options from a routing API | TomTom (truck profile) or OSRM. Missing alternatives are generated through interstate towns, and near-duplicates, detours and loops are filtered out |
+| Weather every 10 / 25 / 50 mi at the ETA | Checkpoints at each interval plus the destination. ETA = departure + drive time to that mile; weather is the hourly forecast for that ETA |
+| Risk from the risk and load rules | `backend/trips/domain/risk.py`, with boundary tests for every band |
+| Recommend best route (risk vs time) | Ranked by the brief's order, with a one-line reason |
+| Routes, checkpoints, risk, ETAs, summaries on a map | Route cards, risk-coloured route, checkpoint hover and table, zoom on click |
+| Corridor heatmap + 0–48 h slider | Smooth heatmap of risk, wind, rain or snow; the slider runs from departure to the last arrival |
 
-- **Shared band edges** (for example 0.25 in/hr) belong to the higher band. Each band includes its lower bound. The top
-  band follows the table: wind ≥55 is No Travel, while rain and snow must be strictly above 1.00 and 3.0.
-- **A checkpoint's level** is the worst of wind (after the load rules), rain and snow. The UI shows which condition
-  set it.
-- **Rain** is liquid precipitation, meaning Open-Meteo's `rain` plus `showers`. **Wind** is the sustained 10 m wind
-  speed, as the table specifies. Gusts are shown but don't affect the level.
-- **Mile attribution:** each checkpoint covers the road halfway to its neighbours on either side, so every mile is
-  counted exactly once.
-- **Ranking:** fewest No Travel miles → fewest Severe miles → fewest High miles → lowest mile-weighted average risk
-  (Low 0 … No Travel 4) → shortest travel time. The brief's list doesn't mention No Travel; since it is strictly
-  worse than Severe, it is ranked first.
-- **Forecast range:** departures can be up to 3 days ahead. The weather window (1 past day + 6 forecast days) then
-  covers a long drive and its timeline. Any miles beyond the forecast are reported as unknown rather than
-  guessed.
+## Decisions where the brief was open
 
-## Keeping API usage bounded
+| Decision | Why |
+|---|---|
+| Shared band edges (e.g. 0.25 in/hr) go to the **higher** band | Safer; wind's "≥55" sets the pattern. Rain and snow No Travel stay strictly above 1.00 / 3.0, as written |
+| A checkpoint's level = **worst** of wind, rain, snow | One dangerous condition is enough |
+| Load rules adjust **wind** only | That's what the brief specifies |
+| **Sustained** wind sets the level; gusts are shown | The table is in sustained mph |
+| Rain = Open-Meteo `rain` + `showers` | Both are liquid precipitation per hour |
+| Each checkpoint covers the road **halfway to its neighbours** | Every mile is counted exactly once, so Severe and High miles add up to the route length |
+| Ranking: **No Travel** miles → Severe → High → average risk → time | The brief's order. No Travel isn't listed, but it's worse than Severe, so it goes first |
+| Average risk is **mile-weighted** (Low 0 … No Travel 4) | Long risky stretches count more than short ones |
+| The reason names the fastest route when it loses | Makes the risk vs time trade-off explicit |
+| Slider runs to the **last truck's arrival** (not a fixed 48 h) | Covers the whole trip; long trips extend it, up to 96 h |
+| Departures up to **3 days ahead** | Hourly forecasts beyond that are unreliable; miles past the forecast are marked unknown, never guessed |
+| Weather snapped to a **0.1° grid** and cached per hour | Stays within Open-Meteo's free limits (10,000 calls/day); overlapping routes share cells |
+| **Demo storm** mode | Real weather is often calm. It's added on top of the real forecast, clearly labelled, and runs through the same rules |
+| No database | The app is stateless; only the cache persists |
 
-Open-Meteo's free tier allows 600 calls a minute and 10,000 a day. We assume each location in a multi-location
-request counts as one call, so the backend:
-
-- **Snaps checkpoints to a 0.1° grid** (about 7 mi), so the three routes share weather cells where they overlap.
-- **Builds the heatmap** from a corridor grid around the routes, sized to the trip (0.1°–2°).
-- **Caps each request** at about 250 checkpoint cells and 220 heatmap cells. Very long trips get a coarser grid
-  instead of exceeding the limits; the grid used is reported in the response's `meta` field.
-- **Caches per cell and hour**, in a file cache shared by all gunicorn workers. A corridor fetched once is free for
-  the next hour, and repeated routes are cached for 6 hours.
-
-A cross-country trip with nothing cached costs at most about 500 locations, and typical trips cost 150–350.
-
-## Run it locally
+## Run locally
 
 ```bash
-# Backend (Python 3.12, uv)
-cd backend
-uv sync
-uv run pytest                  # risk bands, load rules, attribution, ranking, providers, API
-uv run python manage.py runserver 127.0.0.1:8000
-
-# Frontend
-cd frontend
-npm install
-npm run dev                    # http://localhost:5173, proxies /api to :8000
+cd backend && uv sync && uv run pytest && uv run python manage.py runserver 127.0.0.1:8000
+cd frontend && npm install && npm run dev        # http://localhost:5173, proxies /api to :8000
 ```
 
-Optional: put `TOMTOM_API_KEY=...` in `backend/.env` (see `.env.example`) to use TomTom's truck profile, with real
-vehicle weight and traffic. Without it, the app uses the public OSRM server's car profile, with every segment capped
-at 65 mph to approximate truck speeds.
+Optional: set `TOMTOM_API_KEY` in `backend/.env` (see `.env.example`) for truck routing with weight and traffic.
+Without it, OSRM is used with speeds capped at 65 mph.
 
-## API
-
-`POST /api/trips/plan`
-
-```json
-{
-  "origin": {"lat": 41.8781, "lon": -87.6298, "label": "Chicago"},
-  "destination": {"lat": 39.7392, "lon": -104.9903, "label": "Denver"},
-  "departure": "2026-10-22T15:00:00Z",
-  "load_lbs": 42000,
-  "interval_miles": 25
-}
-```
-
-The response contains the ranked routes (path, checkpoints with ETA, conditions and level, miles per level, average
-risk), `recommended_route_id`, `recommendation_reason`, and the heatmap. The heatmap is sent as columnar arrays
-(one hourly frame per hour until the last arrival × cells) so the slider never makes another request. `GET /api/geocode?q=` handles place search;
-`GET /api/health` is a health check.
-
-## Code map
+## Project structure
 
 ```
 backend/trips/
-  domain/risk.py        thresholds + load rules (pure, fully unit tested)
-  domain/analysis.py    checkpoints, ETAs, mile attribution, ranking + reason
-  domain/geo.py         polyline maths, route similarity, loop/spur detection
-  domain/heatmap.py     corridor grid sized to the trip
-  providers/            routing (TomTom/OSRM + via-town alternatives), Open-Meteo, Photon
-  services.py           orchestration + response shape
+  domain/risk.py         risk bands + load rules
+  domain/analysis.py     checkpoints, ETAs, mile attribution, ranking + reason
+  domain/demo_storm.py   simulated storm overlay
+  domain/geo.py          route geometry, similarity, loop/spur detection
+  domain/heatmap.py      corridor grid sized to the trip
+  providers/             routing, weather (grid + cache), geocoding
+  services.py            plans a trip and shapes the response
 frontend/src/
-  components/TripMap.tsx         deck.gl layers: heatmap, routes, checkpoints, trucks
-  lib/heatmapRaster.ts           corridor grid -> bilinear-filtered image, blended between hourly frames
-  components/TimelineControls.tsx trip-length slider, playback, layer picker, legend
-  lib/risk.ts                    colours + heatmap ramps aligned to the thresholds
+  components/TripMap.tsx           map layers and camera
+  components/TimelineControls.tsx  timeline slider and playback
+  lib/heatmapRaster.ts             grid → smooth image, blended between hours
+deploy/                            systemd, nginx and deploy scripts
 ```
 
 ## Deployment
 
-- **Frontend:** Vercel, with `frontend` as the project root. `vercel.json` forwards `/api/*` to the backend, so the
-  browser only ever talks to one HTTPS origin. Deploy with `deploy/deploy-frontend.sh`.
-- **Backend:** a small VPS. gunicorn runs as a systemd service limited to 512 MB of RAM and half a CPU, behind nginx
-  with Let's Encrypt. The configs are in `deploy/`, and `deploy/deploy.sh` pulls, syncs and restarts.
+- **Frontend:** Vercel. `vercel.json` forwards `/api/*` to the backend. Deploy with `deploy/deploy-frontend.sh`.
+- **Backend:** VPS. gunicorn runs under systemd (capped at 512 MB and half a CPU) behind nginx with Let's Encrypt.
+  Update with `deploy/deploy.sh`.
 
 ## Known limits
 
-- Driver hours-of-service breaks are not added to ETAs.
-- The OSRM fallback is a car profile with a speed cap. Truck restrictions (height, weight, hazmat) need the TomTom key.
-- Forecasts cover departures up to 3 days ahead.
+- Driver hours-of-service breaks aren't added to ETAs.
+- Without a TomTom key, routing uses a car profile, so truck restrictions (height, weight, hazmat) aren't applied.
