@@ -753,6 +753,11 @@ button.link:hover {
   font-weight: 600;
 }
 
+button.legend-action {
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .legend i {
   width: 10px;
   height: 10px;

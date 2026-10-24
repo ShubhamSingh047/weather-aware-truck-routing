@@ -70,7 +70,7 @@ The heatmap's hourly frames all arrive in that one response, so the timeline sli
 | Slider runs to the **last truck's arrival** (not a fixed 48 h) | Covers the whole trip; long trips extend it, up to 96 h |
 | Departures up to **3 days ahead** | Hourly forecasts beyond that are unreliable; miles past the forecast are marked unknown, never guessed |
 | Weather snapped to a **0.1° grid** and cached per hour | Stays within Open-Meteo's free limits (10,000 calls/day); overlapping routes share cells |
-| **Demo storm** mode | Real weather is often calm. It's added on top of the real forecast on the selected route (the fastest by default), clearly labelled, and runs through the same rules |
+| **Demo storm** mode | Real weather is often calm. A simulated winter storm (wind; rain on its south side, snow on its north) is added on top of the real forecast on the selected route (the fastest by default), clearly labelled, and runs through the same rules |
 | No database | The app is stateless; only the cache persists |
 
 ## Run locally

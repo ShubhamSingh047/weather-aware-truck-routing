@@ -39,6 +39,8 @@ export interface TripMapHandle {
   zoomToTruck: (routeId: string) => void
   /** Close-up on a point, e.g. a checkpoint. */
   zoomToPoint: (position: LonLat) => void
+  /** Fit a set of forecast cells ([lat, lon]) in view, e.g. where it is snowing. */
+  zoomToCells: (cells: [number, number][]) => void
   /** Fit all routes in view. */
   showAllRoutes: () => void
 }
@@ -99,6 +101,21 @@ export default function TripMap(props: Props) {
         zoomToPoint: closeUp,
         showAllRoutes: () => {
           if (plan) fitRoutes(plan.routes, false)
+        },
+        zoomToCells: (cells) => {
+          if (!cells.length || !containerRef.current || !plan) return
+          const pad = Math.max(plan.heatmap.step_deg, 0.75) // keep a little context around a single cell
+          const lats = cells.map((c) => c[0])
+          const lons = cells.map((c) => c[1])
+          const { clientWidth: width, clientHeight: height } = containerRef.current
+          const { longitude, latitude, zoom } = new WebMercatorViewport({ width, height }).fitBounds(
+            [[Math.min(...lons) - pad, Math.min(...lats) - pad], [Math.max(...lons) + pad, Math.max(...lats) + pad]],
+            { padding: { top: 40, left: 40, right: 40, bottom: 150 } },
+          )
+          setViewState((v) => ({
+            ...v, longitude, latitude, zoom: Math.min(zoom, 8),
+            transitionDuration: 900, transitionInterpolator: new FlyToInterpolator(),
+          }))
         },
       }
     },

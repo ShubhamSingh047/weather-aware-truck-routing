@@ -13,6 +13,17 @@ import { PRESETS, type TripFormValues } from './lib/trip'
 
 const PLAYBACK_SECONDS = 12 // a full trip plays in about this long, whatever its length
 
+// the smallest amount that counts as rain or snow being there (matches the map animation)
+const PRESENT_FROM = { rain_in_hr: 0.005, snow_in_hr: 0.02 }
+
+/** A message beside the legend, optionally with a jump to the hour and place where the weather is. */
+interface LayerNote {
+  text: string
+  action?: string
+  frame?: number
+  where?: [number, number][]
+}
+
 function nextHour(): string {
   const d = new Date()
   d.setHours(d.getHours() + 1, 0, 0, 0)
@@ -137,12 +148,31 @@ export default function App() {
 
   const selectedRoute = plan?.routes.find((r) => r.id === selectedRouteId) ?? null
 
-  // A rain or snow layer with nothing to show says so, instead of looking like the heatmap is off.
-  const layerNote = useMemo(() => {
-    if (!plan || metric === 'risk' || metric === 'wind_mph') return null
-    const peak = Math.max(0, ...plan.heatmap[metric].map((v) => v ?? 0))
-    return peak === 0 ? `No ${metric === 'rain_in_hr' ? 'rain' : 'snow'} forecast on this trip` : null
-  }, [plan, metric])
+  // A rain or snow layer with nothing to draw says so, and points to where and when it does fall.
+  const nowFrame = Math.round(hour)
+  const layerNote = useMemo<LayerNote | null>(() => {
+    if (!plan || !showHeatmap || (metric !== 'rain_in_hr' && metric !== 'snow_in_hr')) return null
+    const word = metric === 'rain_in_hr' ? 'rain' : 'snow'
+    const { cells, frames } = plan.heatmap
+    const values = plan.heatmap[metric]
+    const min = PRESENT_FROM[metric]
+    const wetFrames: number[] = []
+    for (let f = 0; f < frames; f++) {
+      if (cells.some((_, i) => (values[f * cells.length + i] ?? 0) >= min)) wetFrames.push(f)
+    }
+    if (!wetFrames.length) return { text: `No ${word} forecast on this trip` }
+    if (wetFrames.includes(nowFrame)) return null
+    const target = wetFrames.find((f) => f > nowFrame) ?? wetFrames[0]
+    const where = cells.filter((_, i) => (values[target * cells.length + i] ?? 0) >= min)
+    return { text: `No ${word} at this hour`, action: `Show ${word} at +${target}h`, frame: target, where }
+  }, [plan, metric, showHeatmap, nowFrame])
+
+  const showLayerNote = useCallback((note: LayerNote) => {
+    if (note.frame === undefined || !note.where) return
+    setPlaying(false)
+    setHour(note.frame)
+    mapRef.current?.zoomToCells(note.where)
+  }, [])
 
   // First click zooms to the route; clicking the same route again zooms in on its truck.
   const selectRouteFromPanel = useCallback((id: string) => {
@@ -236,6 +266,7 @@ export default function App() {
         {plan && (
           <TimelineControls
             note={layerNote}
+            onNoteAction={layerNote ? () => showLayerNote(layerNote) : undefined}
             hour={hour}
             maxHour={maxHour}
             departureTs={plan.departure_ts}

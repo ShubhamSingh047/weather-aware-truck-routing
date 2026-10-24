@@ -131,8 +131,15 @@ class TestDemoStorm:
         storm = DemoStorm(lat=40.0, lon=-100.0, peak_ts=0)
         windy = Conditions(wind_mph=70, gust_mph=80, rain_in_hr=0.2, snow_in_hr=1.0)
         result = storm.apply(45.0, -90.0, 0, windy)
-        assert result.wind_mph == 70 and result.snow_in_hr == 1.0 and result.rain_in_hr >= 0.2
+        assert result.wind_mph == 70 and result.snow_in_hr >= 1.0 and result.rain_in_hr >= 0.2
         assert storm.apply(40.0, -100.0, 0, None) is None
+
+    def test_snow_falls_on_the_cold_north_side_rain_on_the_south(self):
+        storm = DemoStorm(lat=40.0, lon=-100.0, peak_ts=0)
+        north = storm.apply(40.5, -100.0, 0, CALM)  # ~35 mi north
+        south = storm.apply(39.5, -100.0, 0, CALM)
+        assert north.snow_in_hr > 0.5 and north.rain_in_hr < south.rain_in_hr
+        assert south.snow_in_hr < 0.05 and south.rain_in_hr > 0.2
 
     def test_storm_sits_on_fastest_route_away_from_alternatives(self):
         fastest = straight_route(300, 5)

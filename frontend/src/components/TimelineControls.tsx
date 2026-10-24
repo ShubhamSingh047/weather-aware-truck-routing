@@ -2,8 +2,9 @@ import { formatTime } from '../lib/format'
 import { METRICS, type Metric } from '../lib/risk'
 
 interface Props {
-  /** Shown beside the legend, e.g. when the selected layer is zero for the whole trip. */
-  note?: string | null
+  /** Shown beside the legend, e.g. when the selected layer has nothing at this hour; `action` labels a jump button. */
+  note?: { text: string; action?: string } | null
+  onNoteAction?: () => void
   hour: number
   /** End of the timeline: when the last truck reaches the destination. */
   maxHour: number
@@ -88,7 +89,12 @@ export default function TimelineControls(props: Props) {
             </span>
           ))}
           {scale.unit && <span className="muted">{scale.unit}</span>}
-          {props.note && <strong className="legend-note">{props.note}</strong>}
+          {props.note && <strong className="legend-note">{props.note.text}</strong>}
+          {props.note?.action && (
+            <button type="button" className="link legend-action" onClick={props.onNoteAction}>
+              {props.note.action}
+            </button>
+          )}
         </div>
       </div>
     </div>

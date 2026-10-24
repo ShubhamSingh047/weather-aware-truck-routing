@@ -18,6 +18,9 @@ PEAK_WIND_MPH = 60.0  # core is No Travel for any load
 WIND_RADIUS_MI = 70.0  # e-folding distance; ~50 mph at 30 mi, ~29 mph at 60 mi
 PEAK_RAIN_IN_HR = 0.8
 RAIN_RADIUS_MI = 55.0
+PEAK_SNOW_IN_HR = 1.6  # High: the storm's cold northern side falls as snow
+SNOW_RADIUS_MI = 60.0
+RAIN_SNOW_LINE_MI = 8.0  # width of the change-over from rain (south) to snow (north)
 LIFETIME_H = 12.0  # e-folding time either side of the peak
 DRIFT_MPH = 20.0  # eastward
 GUST_FACTOR = 1.3
@@ -34,7 +37,10 @@ class DemoStorm:
         return self.lat, self.lon + DRIFT_MPH * hours / (69.0 * math.cos(math.radians(self.lat)))
 
     def apply(self, lat: float, lon: float, unix_ts: float, base: Conditions | None) -> Conditions | None:
-        """Combine the storm with real conditions: stronger wind wins, rain adds up."""
+        """Combine the storm with real conditions: stronger wind wins, rain and snow add up.
+
+        North of the centre the precipitation turns to snow, south of it stays rain.
+        """
         if base is None:
             return None
         hours = (unix_ts - self.peak_ts) / 3600
@@ -44,12 +50,14 @@ class DemoStorm:
         dx = (lon - c_lon) * 69.0 * math.cos(math.radians(lat))
         dist2 = dx * dx + dy * dy
         wind = PEAK_WIND_MPH * strength * math.exp(-dist2 / WIND_RADIUS_MI**2)
-        rain = PEAK_RAIN_IN_HR * strength * math.exp(-dist2 / RAIN_RADIUS_MI**2)
+        north = 1 / (1 + math.exp(-dy / RAIN_SNOW_LINE_MI))  # 0 south of the centre, 1 north of it
+        rain = PEAK_RAIN_IN_HR * strength * math.exp(-dist2 / RAIN_RADIUS_MI**2) * (1 - 0.85 * north)
+        snow = PEAK_SNOW_IN_HR * strength * math.exp(-dist2 / SNOW_RADIUS_MI**2) * north
         return Conditions(
             wind_mph=max(base.wind_mph, wind),
             gust_mph=max(base.gust_mph, wind * GUST_FACTOR),
             rain_in_hr=base.rain_in_hr + rain,
-            snow_in_hr=base.snow_in_hr,
+            snow_in_hr=base.snow_in_hr + snow,
         )
 
     @classmethod
