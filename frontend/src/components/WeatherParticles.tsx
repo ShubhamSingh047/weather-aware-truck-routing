@@ -6,7 +6,7 @@ import type { Metric } from '../lib/risk'
 /**
  * Rain streaks, snowflakes or wind streaks drawn over the map, only in the forecast cells that have
  * that weather at the slider's hour, and denser where it is heavier. A canvas on top of the map that
- * ignores the pointer. Wind shows strength only: the forecast has no direction, so streaks blow left to right.
+ * ignores the pointer. Wind shows strength only: the forecast has no direction, so gusts flow left to right.
  */
 type Kind = 'rain' | 'snow' | 'wind'
 const KIND: Partial<Record<Metric, Kind>> = { rain_in_hr: 'rain', snow_in_hr: 'snow', wind_mph: 'wind' }
@@ -19,6 +19,8 @@ const SCALE: Record<Kind, { full: number; min: number }> = {
 }
 const MAX_PER_CELL: Record<Kind, number> = { rain: 16, snow: 16, wind: 5 }
 const BUDGET = 1200 // particles on screen at most
+const WIND_SEGMENTS = 10 // straight pieces per wind streak
+const WIND_TAIL = 6 // of which the first ones are the faint tail
 
 interface Particle {
   u: number // position inside the cell, 0..1
@@ -126,6 +128,8 @@ export default function WeatherParticles({ plan, metric, hour, enabled, viewStat
         while (pool.length < want) pool.push(spawn())
         pool.length = want
         pools.set(i, pool)
+        const tails = new Path2D()
+        const heads = new Path2D()
 
         for (const q of pool) {
           if (kind === 'rain') {
@@ -136,7 +140,6 @@ export default function WeatherParticles({ plan, metric, hour, enabled, viewStat
             q.u += (Math.sin(now / 700 + q.phase) * 14 * dt) / cw
           } else {
             q.u += ((50 + 150 * intensity) * q.speed * dt) / cw
-            q.v += (Math.sin(now / 900 + q.phase) * 5 * dt) / ch
           }
           q.u -= Math.floor(q.u)
           q.v -= Math.floor(q.v)
@@ -157,15 +160,27 @@ export default function WeatherParticles({ plan, metric, hour, enabled, viewStat
               ctx.lineTo(x + dx, y + dy)
             }
           } else {
-            const len = 14 + 22 * intensity * q.speed
-            ctx.moveTo(x, y)
-            ctx.lineTo(x + len, y)
+            // a gust flowing along its own wavy streamline: the tail retraces the head's path, and the
+            // streak grows in and shrinks out across the cell so wrapping round never pops
+            const len = (26 + 36 * intensity * q.speed) * Math.sin(Math.PI * q.u)
+            const amp = 4 + 6 * intensity
+            const at = (px: number) => y + amp * Math.sin((px - cx) / 20 + q.phase) // wave fixed to the map
+            const start = x - len
+            tails.moveTo(start, at(start))
+            for (let s = 1; s <= WIND_SEGMENTS; s++) {
+              const px = start + (len * s) / WIND_SEGMENTS
+              if (s <= WIND_TAIL) tails.lineTo(px, at(px))
+              else heads.lineTo(px, at(px))
+              if (s === WIND_TAIL) heads.moveTo(px, at(px))
+            }
           }
         }
         if (kind === 'wind') {
-          ctx.strokeStyle = `rgba(25, 45, 75, ${0.2 + 0.4 * intensity})`
-          ctx.stroke()
-          ctx.beginPath()
+          const alpha = 0.2 + 0.45 * intensity
+          ctx.strokeStyle = `rgba(25, 45, 75, ${alpha * 0.45})` // faint tail, solid head
+          ctx.stroke(tails)
+          ctx.strokeStyle = `rgba(25, 45, 75, ${alpha})`
+          ctx.stroke(heads)
         }
       })
       if (kind === 'snow') {
