@@ -1,6 +1,6 @@
 import type { SyntheticEvent } from 'react'
 import type { PlanRequest } from '../api/types'
-import { PRESETS, type TripFormValues } from '../lib/trip'
+import { PRESETS, hasPlace, type TripFormValues } from '../lib/trip'
 import PlaceInput from './PlaceInput'
 
 const INTERVALS: PlanRequest['interval_miles'][] = [10, 25, 50]
@@ -11,15 +11,22 @@ interface Props {
   onChange: (values: TripFormValues) => void
   onSubmit: () => void
   onIntervalChange: (interval: PlanRequest['interval_miles']) => void
-  /** Replace the form values and plan straight away (presets, demo storm toggle). */
+  /** Replace the form values and plan straight away. */
   onPreset: (values: TripFormValues) => void
+  /** Demo storm switched; re-plan when the form is complete. */
+  onStormToggle: (on: boolean) => void
 }
 
-export default function TripForm({ values, loading, onChange, onSubmit, onIntervalChange, onPreset }: Props) {
+export default function TripForm(props: Props) {
+  const { values, loading, onChange, onSubmit, onIntervalChange, onPreset, onStormToggle } = props
   const set = <K extends keyof TripFormValues>(key: K, value: TripFormValues[K]) => onChange({ ...values, [key]: value })
   const load = Number(values.loadLbs)
   const loadValid = values.loadLbs !== '' && load >= 0 && load <= 80_000
-  const canSubmit = Boolean(values.origin && values.destination && values.departure && loadValid)
+  const canSubmit =
+    hasPlace(values.origin, values.originText) &&
+    hasPlace(values.destination, values.destinationText) &&
+    Boolean(values.departure) &&
+    loadValid
 
   const submit = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -28,8 +35,12 @@ export default function TripForm({ values, loading, onChange, onSubmit, onInterv
 
   return (
     <form className="trip-form" onSubmit={submit}>
-      <PlaceInput label="Origin" value={values.origin} onChange={(p) => set('origin', p)} />
-      <PlaceInput label="Destination" value={values.destination} onChange={(p) => set('destination', p)} />
+      <PlaceInput label="Origin" value={values.origin} onChange={(p, t) => onChange({ ...values, origin: p, originText: t })} />
+      <PlaceInput
+        label="Destination"
+        value={values.destination}
+        onChange={(p, t) => onChange({ ...values, destination: p, destinationText: t })}
+      />
       <div className="field-row">
         <div className="field">
           <label htmlFor="departure">Departure</label>
@@ -76,10 +87,10 @@ export default function TripForm({ values, loading, onChange, onSubmit, onInterv
         <input
           type="checkbox"
           checked={values.demoStorm}
-          onChange={(e) => (canSubmit ? onPreset({ ...values, demoStorm: e.target.checked }) : set('demoStorm', e.target.checked))}
+          onChange={(e) => (canSubmit ? onStormToggle(e.target.checked) : set('demoStorm', e.target.checked))}
         />
         <span>
-          <strong>Demo storm</strong> — overlay a simulated storm on the real forecast, on the fastest route
+          <strong>Demo storm</strong> — overlay a simulated storm on the real forecast, on the selected route
         </span>
       </label>
       <button className="primary" type="submit" disabled={!canSubmit || loading}>
@@ -93,7 +104,15 @@ export default function TripForm({ values, loading, onChange, onSubmit, onInterv
             type="button"
             className="link"
             disabled={loading}
-            onClick={() => onPreset({ ...values, origin: preset.origin, destination: preset.destination })}
+            onClick={() =>
+              onPreset({
+                ...values,
+                origin: preset.origin,
+                destination: preset.destination,
+                originText: preset.origin.label,
+                destinationText: preset.destination.label,
+              })
+            }
           >
             {preset.label}
           </button>

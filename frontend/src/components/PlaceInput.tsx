@@ -1,15 +1,17 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { searchPlaces } from '../api/client'
 import type { Place } from '../api/types'
 
 interface Props {
   label: string
   value: Place | null
-  onChange: (place: Place | null) => void
+  /** The picked place (or null) and the text now in the box. */
+  onChange: (place: Place | null, text: string) => void
 }
 
 export default function PlaceInput({ label, value, onChange }: Props) {
   const id = useId()
+  const inputRef = useRef<HTMLInputElement>(null)
   const [text, setText] = useState(value?.label ?? '')
   const [options, setOptions] = useState<Place[]>([])
   const [open, setOpen] = useState(false)
@@ -17,11 +19,19 @@ export default function PlaceInput({ label, value, onChange }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('') // what the user typed; drives the search
   const [shownValue, setShownValue] = useState(value)
+  // The last place picked here: typing its name back (e.g. after an undo) picks it again.
+  const [lastPicked, setLastPicked] = useState(value)
 
-  // Reflect external changes (e.g. presets) in the text box.
+  // Reflect external changes (presets, a place resolved at planning) in the text box and drop stale suggestions.
   if (value !== shownValue) {
     setShownValue(value)
-    if (value) setText(value.label)
+    if (value) {
+      setText(value.label)
+      setLastPicked(value)
+      setQuery('')
+      setOptions([])
+      setOpen(false)
+    }
   }
 
   useEffect(() => {
@@ -32,7 +42,8 @@ export default function PlaceInput({ label, value, onChange }: Props) {
         .then((places) => {
           setOptions(places)
           setActive(0)
-          setOpen(true)
+          // a late answer must not pop the list open after the person has moved on
+          setOpen(document.activeElement === inputRef.current)
           setError(null)
         })
         .catch((e: Error) => {
@@ -46,7 +57,7 @@ export default function PlaceInput({ label, value, onChange }: Props) {
   }, [query])
 
   const choose = (place: Place) => {
-    onChange(place)
+    onChange(place, place.label)
     setOpen(false)
   }
 
@@ -54,6 +65,7 @@ export default function PlaceInput({ label, value, onChange }: Props) {
     <div className="field place-input">
       <label htmlFor={id}>{label}</label>
       <input
+        ref={inputRef}
         id={id}
         value={text}
         placeholder="City or address"
@@ -62,10 +74,11 @@ export default function PlaceInput({ label, value, onChange }: Props) {
         aria-expanded={open && options.length > 0}
         aria-controls={`${id}-list`}
         onChange={(e) => {
-          setText(e.target.value)
-          setQuery(e.target.value)
-          if (e.target.value.trim().length < 2) setOptions([])
-          if (value) onChange(null)
+          const next = e.target.value
+          setText(next)
+          setQuery(next)
+          if (next.trim().length < 2) setOptions([])
+          onChange(lastPicked && next.trim() === lastPicked.label ? lastPicked : null, next)
         }}
         onFocus={() => options.length && setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
@@ -104,7 +117,9 @@ export default function PlaceInput({ label, value, onChange }: Props) {
         </ul>
       )}
       {error && <p className="field-hint error">{error}</p>}
-      {!value && text && !open && !error && <p className="field-hint">Pick a place from the suggestions.</p>}
+      {!value && text.trim().length >= 2 && !open && !error && (
+        <p className="field-hint">Plan routes will use the best match for this.</p>
+      )}
     </div>
   )
 }

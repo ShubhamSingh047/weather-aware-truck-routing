@@ -24,6 +24,8 @@ class TripPlanSerializer(serializers.Serializer):
     load_lbs = serializers.FloatField(min_value=0, max_value=80_000)
     interval_miles = serializers.ChoiceField(choices=[10, 25, 50], default=25)
     demo_storm = serializers.BooleanField(default=False)
+    # route the demo storm should hit ("A" is the fastest); the fastest route when omitted
+    storm_route = serializers.ChoiceField(choices=["A", "B", "C"], required=False, allow_null=True)
 
     def validate_departure(self, value):
         now = timezone.now()
@@ -50,4 +52,5 @@ class TripPlanSerializer(serializers.Serializer):
             load_lbs=data["load_lbs"],
             interval_miles=int(data["interval_miles"]),
             demo_storm=data["demo_storm"],
+            storm_route=data.get("storm_route"),
         )

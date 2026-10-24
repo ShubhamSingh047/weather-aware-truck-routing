@@ -1,8 +1,12 @@
 import type { Place, PlanRequest } from '../api/types'
 
 export interface TripFormValues {
+  /** The place picked from the suggestions, or null while the box holds other text. */
   origin: Place | null
   destination: Place | null
+  /** What is in each box; planning uses the best match for it when no place is picked. */
+  originText: string
+  destinationText: string
   departure: string // datetime-local value
   loadLbs: string
   interval: PlanRequest['interval_miles']
@@ -26,3 +30,6 @@ export const PRESETS: { label: string; origin: Place; destination: Place }[] = [
     destination: { label: 'Atlanta, Georgia', lat: 33.749, lon: -84.388 },
   },
 ]
+
+/** A box is usable when a place is picked or it holds something to search for. */
+export const hasPlace = (place: Place | null, text: string) => Boolean(place) || text.trim().length >= 2

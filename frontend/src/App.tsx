@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { planTrip } from './api/client'
-import type { Checkpoint, PlanRequest, PlanResponse } from './api/types'
+import { ApiError, planTrip, searchPlaces } from './api/client'
+import type { Checkpoint, Place, PlanRequest, PlanResponse } from './api/types'
 import CheckpointList from './components/CheckpointList'
 import RiskRules from './components/RiskRules'
 import RouteList from './components/RouteList'
@@ -22,12 +22,26 @@ function nextHour(): string {
 const INITIAL_FORM: TripFormValues = {
   origin: PRESETS[0].origin,
   destination: PRESETS[0].destination,
+  originText: PRESETS[0].origin.label,
+  destinationText: PRESETS[0].destination.label,
   departure: nextHour(),
   loadLbs: '42000',
   interval: 25,
   // ?demo=storm starts with the simulated storm on, handy for recording a walkthrough.
   demoStorm: new URLSearchParams(window.location.search).get('demo') === 'storm',
 }
+
+/** The picked place, or the best search match for what is typed in the box. */
+async function resolvePlace(place: Place | null, text: string, signal: AbortSignal): Promise<Place> {
+  if (place) return place
+  const query = text.trim()
+  const [best] = await searchPlaces(query, signal)
+  if (!best) throw new ApiError(`Couldn't find "${query}". Try a city name.`)
+  return best
+}
+
+const sameTrip = (a: Place[] | null, b: Place[]) =>
+  Boolean(a) && a!.every((p, i) => p.lat === b[i].lat && p.lon === b[i].lon)
 
 export default function App() {
   const [form, setForm] = useState<TripFormValues>(INITIAL_FORM)
@@ -44,26 +58,40 @@ export default function App() {
   const mapRef = useRef<TripMapHandle>(null)
   const lastZoomedRoute = useRef<string | null>(null)
 
-  const runPlan = useCallback(async (values: TripFormValues) => {
-    if (!values.origin || !values.destination) return
+  // Origin and destination of the last plan: a storm target (route id) only means something for the same trip.
+  const lastTrip = useRef<Place[] | null>(null)
+
+  /** Plan the trip in `values`; `stormRoute` is the route the demo storm should hit (the fastest when null). */
+  const runPlan = useCallback(async (values: TripFormValues, stormRoute: string | null = null) => {
     inflight.current?.abort()
     const controller = new AbortController()
     inflight.current = controller
     setLoading(true)
     setError(null)
-    const request: PlanRequest = {
-      origin: values.origin,
-      destination: values.destination,
-      departure: new Date(values.departure).toISOString(),
-      load_lbs: Number(values.loadLbs),
-      interval_miles: values.interval,
-      demo_storm: values.demoStorm,
-    }
     try {
+      const origin = await resolvePlace(values.origin, values.originText, controller.signal)
+      const destination = await resolvePlace(values.destination, values.destinationText, controller.signal)
+      if (origin !== values.origin || destination !== values.destination) {
+        // show the place that was actually used
+        setForm((f) => ({ ...f, origin, destination, originText: origin.label, destinationText: destination.label }))
+      }
+      const trip = [origin, destination]
+      const request: PlanRequest = {
+        origin,
+        destination,
+        departure: new Date(values.departure).toISOString(),
+        load_lbs: Number(values.loadLbs),
+        interval_miles: values.interval,
+        demo_storm: values.demoStorm,
+        storm_route: values.demoStorm && sameTrip(lastTrip.current, trip) ? stormRoute : null,
+      }
       const result = await planTrip(request, controller.signal)
+      lastTrip.current = trip
       setPlan(result)
+      // with a demo storm, keep the route it hits selected so its risk is in view
+      const selected = result.demo_storm?.route_id ?? result.recommended_route_id
       lastZoomedRoute.current = result.recommended_route_id // the map zooms to it for a new plan
-      setSelectedRouteId(result.recommended_route_id)
+      setSelectedRouteId(selected)
       setHoveredCheckpoint(null)
       setHour(0)
       setPlaying(false)
@@ -140,15 +168,20 @@ export default function App() {
           values={form}
           loading={loading}
           onChange={setForm}
-          onSubmit={() => runPlan(form)}
+          onSubmit={() => runPlan(form, selectedRouteId)}
           onIntervalChange={(interval) => {
             const next = { ...form, interval }
             setForm(next)
-            if (plan) runPlan(next)
+            if (plan) runPlan(next, plan.demo_storm?.route_id ?? selectedRouteId)
           }}
           onPreset={(values) => {
             setForm(values)
             runPlan(values)
+          }}
+          onStormToggle={(on) => {
+            const next = { ...form, demoStorm: on }
+            setForm(next)
+            runPlan(next, selectedRouteId)
           }}
         />
         {error && (
@@ -158,8 +191,9 @@ export default function App() {
         )}
         {plan?.demo_storm && (
           <p className="demo-banner" role="status">
-            <strong>Simulated storm.</strong> A demo storm peaking at {formatTime(plan.demo_storm.peak_ts)} is added
-            to the real forecast. Risk levels and the recommendation below use the combined weather.
+            <strong>Simulated storm on route {plan.demo_storm.route_id}.</strong> A demo storm peaking at{' '}
+            {formatTime(plan.demo_storm.peak_ts)} is added to the real forecast. Risk levels and the recommendation
+            below use the combined weather. To move it, select another route and plan again.
           </p>
         )}
         {plan && (

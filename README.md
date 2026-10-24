@@ -46,7 +46,7 @@ The heatmap's hourly frames all arrive in that one response, so the timeline sli
 
 | Brief | Implementation |
 |---|---|
-| Origin, destination, departure, load | Form with place autocomplete; departure up to 3 days ahead; 0–80,000 lb |
+| Origin, destination, departure, load | Form with place autocomplete (or the best match for whatever is typed); departure up to 3 days ahead; 0–80,000 lb |
 | 3 route options from a routing API | TomTom (truck profile) or OSRM. Missing alternatives are generated through interstate towns, and near-duplicates, detours and loops are filtered out |
 | Weather every 10 / 25 / 50 mi at the ETA | Checkpoints at each interval plus the destination. ETA = departure + drive time to that mile; weather is the hourly forecast for that ETA |
 | Risk from the risk and load rules | `backend/trips/domain/risk.py`, with boundary tests for every band |
@@ -70,7 +70,7 @@ The heatmap's hourly frames all arrive in that one response, so the timeline sli
 | Slider runs to the **last truck's arrival** (not a fixed 48 h) | Covers the whole trip; long trips extend it, up to 96 h |
 | Departures up to **3 days ahead** | Hourly forecasts beyond that are unreliable; miles past the forecast are marked unknown, never guessed |
 | Weather snapped to a **0.1° grid** and cached per hour | Stays within Open-Meteo's free limits (10,000 calls/day); overlapping routes share cells |
-| **Demo storm** mode | Real weather is often calm. It's added on top of the real forecast, clearly labelled, and runs through the same rules |
+| **Demo storm** mode | Real weather is often calm. It's added on top of the real forecast on the selected route (the fastest by default), clearly labelled, and runs through the same rules |
 | No database | The app is stateless; only the cache persists |
 
 ## Run locally

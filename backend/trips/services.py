@@ -31,6 +31,7 @@ class TripRequest:
     load_lbs: float
     interval_miles: int
     demo_storm: bool = False  # overlay a simulated storm on the real forecast
+    storm_route: str | None = None  # route id the storm should hit; the fastest when None
 
 
 def plan_trip(req: TripRequest, weather: OpenMeteoWeather | None = None) -> dict:
@@ -44,7 +45,13 @@ def plan_trip(req: TripRequest, weather: OpenMeteoWeather | None = None) -> dict
     weather.checkpoint_step, checkpoint_cells = _fit_checkpoint_cells(geometries, req.interval_miles)
     weather.prefetch(checkpoint_cells + heat_cells)
 
-    storm = DemoStorm.on_route(geometries[0], geometries[1:], req.departure_ts) if req.demo_storm else None
+    storm = None
+    storm_index = 0
+    if req.demo_storm:
+        if req.storm_route and ROUTE_LABELS.index(req.storm_route) < len(geometries):
+            storm_index = ROUTE_LABELS.index(req.storm_route)
+        others = geometries[:storm_index] + geometries[storm_index + 1:]
+        storm = DemoStorm.on_route(geometries[storm_index], others, req.departure_ts)
     lookup: WeatherLookup = StormWeather(weather, storm) if storm else weather
 
     analyses = [
@@ -72,7 +79,8 @@ def plan_trip(req: TripRequest, weather: OpenMeteoWeather | None = None) -> dict
         ],
         "heatmap": _heatmap(weather, heat_cells, step, req, storm, _timeline_hours(options)),
         "demo_storm": (
-            {"lat": round(storm.lat, 4), "lon": round(storm.lon, 4), "peak_ts": round(storm.peak_ts)}
+            {"lat": round(storm.lat, 4), "lon": round(storm.lon, 4), "peak_ts": round(storm.peak_ts),
+             "route_id": ROUTE_LABELS[storm_index]}
             if storm else None
         ),
         "meta": {

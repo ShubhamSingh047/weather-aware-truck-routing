@@ -14,6 +14,8 @@ export interface PlanRequest {
   interval_miles: 10 | 25 | 50
   /** Overlay a simulated storm on the real forecast (for demos). */
   demo_storm: boolean
+  /** Route the demo storm should hit; the fastest when omitted. */
+  storm_route?: string | null
 }
 
 export interface Checkpoint {
@@ -67,7 +69,7 @@ export interface PlanResponse {
   recommended_route_id: string
   recommendation_reason: string
   /** Present only when a simulated storm was overlaid: centre and time at its peak. */
-  demo_storm: { lat: number; lon: number; peak_ts: number } | null
+  demo_storm: { lat: number; lon: number; peak_ts: number; route_id: string } | null
   routes: Route[]
   heatmap: Heatmap
   meta: {

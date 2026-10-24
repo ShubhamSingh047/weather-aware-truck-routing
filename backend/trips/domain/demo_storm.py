@@ -1,9 +1,10 @@
 """A simulated storm laid over the real forecast, for demos when the weather is calm.
 
-The storm is placed on the fastest route where the alternatives are farthest
-away, and peaks exactly when that route's truck gets there. Everything
-downstream (risk rules, load rules, ranking, heatmap) runs unchanged on the
-combined conditions, so the demo exercises the real logic.
+The storm is placed on the target route (the fastest unless the person picks
+another) where the alternatives are farthest away, and peaks exactly when that
+route's truck gets there. Everything downstream (risk rules, load rules,
+ranking, heatmap) runs unchanged on the combined conditions, so the demo
+exercises the real logic.
 """
 
 import math
@@ -52,22 +53,22 @@ class DemoStorm:
         )
 
     @classmethod
-    def on_route(cls, fastest: RouteGeometry, others: Sequence[RouteGeometry], departure_ts: float) -> "DemoStorm":
-        """Centre on the middle half of `fastest`, as far from the other routes as possible."""
+    def on_route(cls, target: RouteGeometry, others: Sequence[RouteGeometry], departure_ts: float) -> "DemoStorm":
+        """Centre on the middle half of `target`, as far from the other routes as possible."""
         reference = [p for g in others for p in sample_spaced(g.coords, g.miles, 5.0)]
 
         def clearance(mile: float) -> float:
-            lat, lon = fastest.point_at_mile(mile)
+            lat, lon = target.point_at_mile(mile)
             if not reference:
                 return 0.0
             cos_lat = math.cos(math.radians(lat))
             return min(((lat - q[0]) * 69.0) ** 2 + ((lon - q[1]) * 69.0 * cos_lat) ** 2 for q in reference)
 
-        length = fastest.length_miles
+        length = target.length_miles
         candidates = [length * f / 20 for f in range(5, 16)]  # 25% .. 75%
         mile = max(candidates, key=clearance)
-        lat, lon = fastest.point_at_mile(mile)
-        return cls(lat=lat, lon=lon, peak_ts=departure_ts + fastest.seconds_at_mile(mile))
+        lat, lon = target.point_at_mile(mile)
+        return cls(lat=lat, lon=lon, peak_ts=departure_ts + target.seconds_at_mile(mile))
 
 
 class StormWeather:

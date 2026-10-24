@@ -100,3 +100,29 @@ def test_demo_storm_hits_fastest_route_and_changes_recommendation(monkeypatch):
     assert stormy["routes"][0]["miles_by_level"]["NO_TRAVEL"] > 0
     assert stormy["recommended_route_id"] == "B"
     assert max(v for v in stormy["heatmap"]["risk"] if v is not None) == 4
+
+
+def test_demo_storm_can_target_the_selected_route(monkeypatch):
+    def far_apart_routes(origin, destination, departure_ts, load_lbs):
+        fast = build_geometry([origin, (40.5, -99.0), destination], total_seconds=3 * 3600)
+        slow = build_geometry([origin, (38.0, -99.0), destination], total_seconds=4 * 3600)
+        return [RouteOption(fast, "I-80", "fake"), RouteOption(slow, "I-70", "fake")]
+
+    def calm_fetch(self, cells):
+        now = int(timezone.now().timestamp()) // 3600 * 3600 - 3600
+        return [HourlySeries(now, [5.0] * 200, [8.0] * 200, [0.0] * 200, [0.0] * 200) for _ in cells]
+
+    monkeypatch.setattr(services, "route_options", far_apart_routes)
+    monkeypatch.setattr(OpenMeteoWeather, "_fetch_chunk", calm_fetch)
+
+    data = APIClient().post("/api/trips/plan", payload(demo_storm=True, storm_route="B"), format="json").json()
+
+    assert data["demo_storm"]["route_id"] == "B"
+    assert data["routes"][1]["miles_by_level"]["NO_TRAVEL"] > 0
+    assert data["routes"][0]["miles_by_level"]["NO_TRAVEL"] == 0
+    assert data["recommended_route_id"] == "A"
+
+
+def test_storm_route_must_be_a_route_id():
+    response = APIClient().post("/api/trips/plan", payload(demo_storm=True, storm_route="Z"), format="json")
+    assert response.status_code == 400 and "storm_route" in response.json()
