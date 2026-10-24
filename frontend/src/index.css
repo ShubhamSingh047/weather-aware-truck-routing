@@ -50,12 +50,63 @@ input {
 }
 
 .panel {
+  background: var(--panel-bg);
   overflow-y: auto;
   border-right: 1px solid var(--line);
   padding: 20px 20px 28px;
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+/* ---------- Layer themes ----------
+   Picking a heatmap layer re-tints the app around the data: panel, brand colour and the base map.
+   Risk colours, heatmap scales, routes and checkpoints never change, so the numbers read the same. */
+.app {
+  --panel-bg: var(--surface);
+  --layer-edge: var(--line);
+  --basemap-filter: none;
+}
+
+.app[data-layer='wind_mph'] {
+  --brand: #1f4e79;
+  --brand-2: #2f6fa8;
+  --panel-bg: #e9f0f7;
+  --layer-edge: #7fa3c6;
+  --basemap-filter: sepia(0.3) hue-rotate(175deg) saturate(0.9) brightness(0.92);
+}
+
+.app[data-layer='rain_in_hr'] {
+  --brand: #1e3a8a;
+  --brand-2: #3151b5;
+  --panel-bg: #e4eaf7;
+  --layer-edge: #7d93d0;
+  --basemap-filter: sepia(0.5) hue-rotate(172deg) saturate(2) brightness(0.86);
+}
+
+.app[data-layer='snow_in_hr'] {
+  --brand: #0e6a80;
+  --brand-2: #0891b2;
+  --panel-bg: #e8f6fb;
+  --layer-edge: #6cc3da;
+  --basemap-filter: sepia(0.3) hue-rotate(150deg) saturate(1.2) brightness(1.08) contrast(0.92);
+}
+
+.panel,
+button.primary,
+.play,
+.brand h1,
+.timeline {
+  transition: background-color 0.45s ease, color 0.45s ease, border-color 0.45s ease;
+}
+
+.map .maplibregl-canvas {
+  filter: var(--basemap-filter);
+  transition: filter 0.45s ease;
+}
+
+.timeline .segmented button.on {
+  color: var(--brand);
 }
 
 .map-area {
@@ -606,6 +657,7 @@ button.link:hover {
   padding: 12px 14px;
   background: rgb(255 255 255 / 0.96);
   border: 1px solid var(--line);
+  border-top: 3px solid var(--layer-edge);
   border-radius: 12px;
   box-shadow: 0 10px 30px rgb(0 0 0 / 0.12);
   display: flex;

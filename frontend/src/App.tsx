@@ -165,7 +165,7 @@ export default function App() {
   )
 
   return (
-    <div className="app">
+    <div className="app" data-layer={showHeatmap ? metric : 'off'}>
       <aside className="panel">
         <header className="brand">
           <h1>Weather-Aware Truck Routing</h1>
