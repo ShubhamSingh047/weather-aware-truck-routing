@@ -52,7 +52,7 @@ The heatmap's hourly frames all arrive in that one response, so the timeline sli
 | Risk from the risk and load rules | `backend/trips/domain/risk.py`, with boundary tests for every band |
 | Recommend best route (risk vs time) | Ranked by the brief's order, with a one-line reason |
 | Routes, checkpoints, risk, ETAs, summaries on a map | Route cards, risk-coloured route, checkpoint hover and table, zoom on click |
-| Corridor heatmap + 0–48 h slider | Smooth heatmap of risk, wind, rain or snow; the slider runs from departure to the last arrival |
+| Corridor heatmap + 0–48 h slider | Smooth heatmap of risk, wind, rain or snow; the slider runs from departure to the last arrival. Wind, rain and snow animate where the forecast has them, and the base map takes on that layer's tint |
 
 ## Decisions where the brief was open
 

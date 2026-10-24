@@ -8,6 +8,7 @@ import { formatNumber, formatTime } from '../lib/format'
 import { gridLayout, renderHeatmap } from '../lib/heatmapRaster'
 import { RISK_LABEL, RISK_RGB, UNKNOWN_RGB, type Metric } from '../lib/risk'
 import { bounds, positionAt, riskSegments, type LonLat, type RiskSegment } from '../lib/route'
+import WeatherParticles from './WeatherParticles'
 
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/positron'
 const CLOSE_UP_ZOOM = 8 // roughly 100 miles across: individual checkpoints and towns
@@ -198,6 +199,7 @@ export default function TripMap(props: Props) {
       >
         <Map mapStyle={MAP_STYLE} reuseMaps attributionControl={{ compact: true }} />
       </DeckGL>
+      <WeatherParticles plan={plan} metric={metric} hour={hour} enabled={showHeatmap} viewState={viewState} />
     </div>
   )
 }
