@@ -129,14 +129,14 @@ export default function WeatherParticles({ plan, metric, hour, enabled, viewStat
 
         for (const q of pool) {
           if (kind === 'rain') {
-            q.v += ((480 + 260 * intensity) * q.speed * dt) / ch
-            q.u -= (90 * q.speed * dt) / cw
+            q.v += ((200 + 120 * intensity) * q.speed * dt) / ch
+            q.u -= (40 * q.speed * dt) / cw
           } else if (kind === 'snow') {
             q.v += ((35 + 30 * intensity) * q.speed * dt) / ch
             q.u += (Math.sin(now / 700 + q.phase) * 14 * dt) / cw
           } else {
-            q.u += ((140 + 520 * intensity) * q.speed * dt) / cw
-            q.v += (Math.sin(now / 400 + q.phase) * 6 * dt) / ch
+            q.u += ((50 + 150 * intensity) * q.speed * dt) / cw
+            q.v += (Math.sin(now / 900 + q.phase) * 5 * dt) / ch
           }
           q.u -= Math.floor(q.u)
           q.v -= Math.floor(q.v)
