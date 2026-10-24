@@ -29,7 +29,7 @@ export type Metric = 'risk' | 'wind_mph' | 'rain_in_hr' | 'snow_in_hr'
 interface MetricScale {
   label: string
   unit: string
-  /** Heatmap weight for a raw value; values <= 0 are not drawn. */
+  /** Heatmap weight for a raw value; zero draws as faint Low. */
   weight: (value: number) => number
   /** Weight at the top of the colour ramp. */
   max: number

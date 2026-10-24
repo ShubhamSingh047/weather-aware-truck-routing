@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError, planTrip, searchPlaces } from './api/client'
 import type { Checkpoint, Place, PlanRequest, PlanResponse } from './api/types'
 import CheckpointList from './components/CheckpointList'
@@ -137,6 +137,13 @@ export default function App() {
 
   const selectedRoute = plan?.routes.find((r) => r.id === selectedRouteId) ?? null
 
+  // A rain or snow layer with nothing to show says so, instead of looking like the heatmap is off.
+  const layerNote = useMemo(() => {
+    if (!plan || metric === 'risk' || metric === 'wind_mph') return null
+    const peak = Math.max(0, ...plan.heatmap[metric].map((v) => v ?? 0))
+    return peak === 0 ? `No ${metric === 'rain_in_hr' ? 'rain' : 'snow'} forecast on this trip` : null
+  }, [plan, metric])
+
   // First click zooms to the route; clicking the same route again zooms in on its truck.
   const selectRouteFromPanel = useCallback((id: string) => {
     setPlaying(false)
@@ -228,6 +235,7 @@ export default function App() {
         {plan?.demo_storm && !loading && <div className="map-chip">Simulated storm</div>}
         {plan && (
           <TimelineControls
+            note={layerNote}
             hour={hour}
             maxHour={maxHour}
             departureTs={plan.departure_ts}

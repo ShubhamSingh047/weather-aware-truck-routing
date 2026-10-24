@@ -18,7 +18,7 @@ export interface GridLayout {
 
 const RAMP_SIZE = 256
 const MAX_ALPHA = 0.72
-const MIN_ALPHA_SHARE = 0.3 // calm-but-present weather stays faintly visible
+const MIN_ALPHA_SHARE = 0.3 // calm or zero weather stays faintly visible
 
 export function gridLayout(heatmap: Heatmap): GridLayout {
   const step = heatmap.step_deg
@@ -69,8 +69,8 @@ export function renderHeatmap(heatmap: Heatmap, layout: GridLayout, metric: Metr
     if (a === null && b === null) continue
     a ??= b as number
     b ??= a
-    const weight = scale.weight(a + (b - a) * t)
-    if (weight <= 0) continue
+    // zero (no rain, no snow) is drawn as faint Low, so a calm forecast never looks like "heatmap off"
+    const weight = Math.max(0, scale.weight(a + (b - a) * t))
     const color = ramp[Math.min(RAMP_SIZE - 1, Math.floor((weight / scale.max) * RAMP_SIZE))]
     const alpha = MAX_ALPHA * Math.min(1, Math.max(MIN_ALPHA_SHARE, weight / scale.fadeBelow))
     const p = pixel[i] * 4

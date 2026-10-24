@@ -707,6 +707,11 @@ button.link:hover {
   gap: 4px;
 }
 
+.legend-note {
+  color: var(--ink);
+  font-weight: 600;
+}
+
 .legend i {
   width: 10px;
   height: 10px;
